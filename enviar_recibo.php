@@ -16,8 +16,9 @@ if (!$u) fail('auth', 'Sessão expirada. Atualize a página e entre de novo.', 4
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') fail('method', 'Método inválido.', 405);
 if (!hash_equals(csrf_token(), $_POST['csrf'] ?? '')) fail('csrf', 'Sessão expirada. Atualize a página.', 403);
 
-if (SMTP_HOST === '' || SMTP_USER === '') {
-    fail('smtp_not_configured', 'SMTP não configurado no config.php.');
+$useBrevo = BREVO_API_KEY !== '';
+if (!$useBrevo && (SMTP_HOST === '' || SMTP_USER === '')) {
+    fail('smtp_not_configured', 'Envio por servidor não configurado (nem Brevo nem SMTP).');
 }
 
 /* movimento + cliente, garantindo que pertence ao utilizador */
@@ -50,7 +51,48 @@ if ($corpo === '') {
 }
 $pdfName = 'Recibo_' . preg_replace('/[^\w\-]+/', '_', $m['rec_id']) . '_' . date('d-m-Y', strtotime($m['mov_date'])) . '.pdf';
 
-/* envio */
+$fromName  = SMTP_FROM_NAME ?: ($u['brand'] ?: ($u['name'] ?: APP_NAME));
+$fromEmail = SMTP_USER ?: ($u['email'] ?: '');
+$userEmail = ($u['email'] && filter_var($u['email'], FILTER_VALIDATE_EMAIL)) ? $u['email'] : '';
+
+/* ── Opção A: Brevo (API HTTP, porta 443 — funciona no Render grátis) ── */
+if ($useBrevo) {
+    if ($fromEmail === '') {
+        fail('no_sender', 'Falta o email remetente (defina SMTP_USER ou o email no perfil).');
+    }
+    $payload = [
+        'sender'      => ['name' => $fromName, 'email' => $fromEmail],
+        'to'          => [['email' => $m['c_email'], 'name' => $m['c_name']]],
+        'subject'     => $assunto,
+        'textContent' => $corpo,
+        'attachment'  => [['content' => base64_encode($pdfData), 'name' => $pdfName]],
+    ];
+    if ($userEmail) {
+        $payload['cc']      = [['email' => $userEmail]];          // cópia para o fornecedor
+        $payload['replyTo'] = ['email' => $userEmail, 'name' => $fromName];
+    }
+    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_HTTPHEADER     => ['api-key: ' . BREVO_API_KEY, 'Content-Type: application/json', 'Accept: application/json'],
+        CURLOPT_POSTFIELDS     => json_encode($payload),
+        CURLOPT_TIMEOUT        => 25,
+    ]);
+    $resp = curl_exec($ch);
+    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $cerr = curl_error($ch);
+    curl_close($ch);
+
+    if ($http >= 200 && $http < 300) {
+        echo json_encode(['ok' => true, 'to' => $m['c_email'], 'via' => 'brevo']);
+        exit;
+    }
+    $detail = $cerr ?: (is_string($resp) ? substr($resp, 0, 300) : '');
+    fail('send_failed', 'Falha no envio (Brevo, HTTP ' . $http . '): ' . $detail, 500);
+}
+
+/* ── Opção B: SMTP (PHPMailer) — uso local ou Render pago ── */
 require_once __DIR__ . '/includes/phpmailer/PHPMailer.php';
 require_once __DIR__ . '/includes/phpmailer/SMTP.php';
 require_once __DIR__ . '/includes/phpmailer/Exception.php';

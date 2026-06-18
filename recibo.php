@@ -154,7 +154,7 @@ const SUBJECT  = <?= json_encode($titulo . ' — ' . $m['c_name'] . ' — Nº ' 
 const BODY     = <?= json_encode($body) ?>;
 const MAILTO   = <?= json_encode($mailto) ?>;
 const PDF_NAME = <?= json_encode('Recibo_' . preg_replace('/[^\w\-]+/', '_', $m['rec_id']) . '_' . date('d-m-Y', strtotime($m['mov_date'])) . '.pdf') ?>;
-const SMTP_ENABLED = <?= json_encode(SMTP_HOST !== '' && SMTP_USER !== '') ?>;
+const SMTP_ENABLED = <?= json_encode(BREVO_API_KEY !== '' || (SMTP_HOST !== '' && SMTP_USER !== '')) ?>;
 const CLIENT_EMAIL = <?= json_encode($m['c_email'] ?? '') ?>;
 const MOVEMENT_ID  = <?= (int)$m['id'] ?>;
 const CSRF_TOKEN   = <?= json_encode(csrf_token()) ?>;

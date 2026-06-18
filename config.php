@@ -56,3 +56,6 @@ if (!defined('SMTP_PORT'))      define('SMTP_PORT', (int)$envv('SMTP_PORT', '587
 if (!defined('SMTP_USER'))      define('SMTP_USER', $envv('SMTP_USER', ''));        // ex.: 'oseuemail@gmail.com'
 if (!defined('SMTP_PASS'))      define('SMTP_PASS', $envv('SMTP_PASS', ''));        // palavra-passe de app
 if (!defined('SMTP_FROM_NAME')) define('SMTP_FROM_NAME', $envv('SMTP_FROM_NAME', '')); // vazio = usa marca/nome do perfil
+
+// ── Brevo (envio por API HTTP — funciona no Render grátis, ao contrário do SMTP) ──
+if (!defined('BREVO_API_KEY')) define('BREVO_API_KEY', $envv('BREVO_API_KEY', ''));

@@ -25,12 +25,13 @@ services:
         sync: false            # ← ex.: postgres.bgfbqaqigbvshhuhashw
       - key: DB_PASS
         sync: false            # ← a tua password do Supabase (crua, tal como é)
-      # ── Email (Gmail) ──
+      # ── Email via Brevo (API HTTP — funciona no Render grátis) ──
+      - key: BREVO_API_KEY
+        sync: false            # ← a tua API key do Brevo (SMTP & API → API Keys)
+      - key: SMTP_USER
+        value: fivelayers3d@gmail.com   # remetente (valida este email no Brevo)
+      # SMTP do Gmail fica como alternativa local (não funciona no Render grátis)
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT
         value: "587"
-      - key: SMTP_USER
-        value: fivelayers3d@gmail.com
-      - key: SMTP_PASS
-        sync: false            # ← palavra-passe de app do Gmail
