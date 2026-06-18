@@ -1,0 +1,12 @@
+# Segredos locais — nunca versionar
+config.local.php
+
+# Base de dados SQLite local
+data/*.sqlite
+data/*.sqlite-journal
+data/*.sqlite-wal
+data/*.sqlite-shm
+
+# Sistema / logs
+.DS_Store
+*.log
