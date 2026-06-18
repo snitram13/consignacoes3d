@@ -35,7 +35,7 @@ git push -u origin main
 2. **New + → Blueprint** → escolhe o repositório `consignacoes-3d`
 3. O Render lê o `render.yaml` e pede os 2 segredos (`sync: false`). Define:
    - **DATABASE_URL** = o URI do Supabase (passo 1)
-   - **SMTP_PASS** = `REMOVIDO` (palavra-passe de app do Gmail)
+   - **SMTP_PASS** = a tua palavra-passe de app do Gmail (16 letras, de myaccount.google.com/apppasswords)
 4. **Apply / Create** → espera o build (~3-5 min)
 
 ## 4. Primeiro arranque
