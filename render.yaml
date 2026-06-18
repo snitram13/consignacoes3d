@@ -1,19 +1,20 @@
 # Blueprint do Render — cria o serviço automaticamente a partir deste repositório.
 # Painel: New + → Blueprint → escolhe este repo.
+#
+# Base de dados: PostgreSQL no Supabase (grátis e permanente).
+# O Render só serve o PHP; os dados ficam no Supabase.
 services:
   - type: web
     name: consignacoes-3d
     runtime: docker
     region: frankfurt          # mais perto de Portugal
-    plan: free                 # ⚠️ FREE: dados em SQLite NÃO persistem (apagados a cada deploy/reinício)
-                               #    Para dados permanentes: muda para "starter" e descomenta o bloco "disk" abaixo.
+    plan: free                 # grátis: a app "adormece" após 15 min sem uso (acorda em ~1 min)
     envVars:
       - key: APP_NAME
         value: Consignações 3D
-      - key: DB_DRIVER
-        value: sqlite          # com disco persistente, o SQLite passa a guardar tudo
-      - key: DB_SQLITE_PATH
-        value: /var/www/html/data/consignacoes.sqlite
+      - key: DATABASE_URL
+        sync: false            # ← cola aqui a connection string do Supabase (Settings → Database)
+                               #    Usa a versão "IPv4 / Session pooler" (porta 5432)
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT
@@ -21,9 +22,4 @@ services:
       - key: SMTP_USER
         value: fivelayers3d@gmail.com
       - key: SMTP_PASS
-        sync: false            # ← define no painel (Environment) — NÃO fica no Git
-    # ─── DADOS PERMANENTES (requer plano "starter" ~7$/mês) ───
-    # disk:
-    #   name: dados
-    #   mountPath: /var/www/html/data
-    #   sizeGB: 1
+        sync: false            # ← palavra-passe de app do Gmail — define no painel, não fica no Git

@@ -93,6 +93,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 );");
+            } elseif (DB_DRIVER === 'pgsql') {
+                $pdo->exec("
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(60) NOT NULL UNIQUE,
+                    password_hash VARCHAR(255) NOT NULL,
+                    name VARCHAR(120) DEFAULT '',
+                    nif VARCHAR(20) DEFAULT '',
+                    phone VARCHAR(30) DEFAULT '',
+                    email VARCHAR(120) DEFAULT '',
+                    brand VARCHAR(120) DEFAULT '',
+                    logo TEXT,
+                    commission REAL DEFAULT 0.20,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS clients (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    name VARCHAR(120) NOT NULL,
+                    nif VARCHAR(20) DEFAULT '',
+                    phone VARCHAR(30) DEFAULT '',
+                    email VARCHAR(120) DEFAULT '',
+                    commission REAL,
+                    last_date DATE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS products (
+                    id SERIAL PRIMARY KEY,
+                    client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+                    name VARCHAR(160) NOT NULL,
+                    qty INTEGER NOT NULL DEFAULT 0,
+                    price REAL NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS movements (
+                    id SERIAL PRIMARY KEY,
+                    client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+                    type VARCHAR(10) NOT NULL,
+                    mov_date DATE NOT NULL,
+                    rec_id VARCHAR(20) NOT NULL,
+                    comm_rate REAL NOT NULL,
+                    total_sold REAL DEFAULT 0,
+                    commission_value REAL DEFAULT 0,
+                    net_value REAL DEFAULT 0,
+                    signature TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS movement_items (
+                    id SERIAL PRIMARY KEY,
+                    movement_id INTEGER NOT NULL REFERENCES movements(id) ON DELETE CASCADE,
+                    kind VARCHAR(10) NOT NULL,
+                    name VARCHAR(160) NOT NULL,
+                    qty INTEGER NOT NULL,
+                    price REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS catalog (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    name VARCHAR(160) NOT NULL,
+                    price REAL NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );");
             } else {
                 $pdo->exec("
                 CREATE TABLE IF NOT EXISTS users (
@@ -164,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st = $pdo->prepare('INSERT INTO users (username, password_hash, name, commission) VALUES (?,?,?,?)');
             $st->execute([$username, password_hash($pass, PASSWORD_DEFAULT), $name, COMM_DEFAULT]);
 
-            $_SESSION['uid'] = (int)$pdo->lastInsertId();
+            $_SESSION['uid'] = db_last_id('users');
             session_regenerate_id(true);
             header('Location: index.php');
             exit;

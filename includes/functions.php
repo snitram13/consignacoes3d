@@ -44,6 +44,15 @@ function redirect(string $url): void {
     exit;
 }
 
+/* Último ID inserido (compatível com Postgres, que precisa do nome da sequência) */
+function db_last_id(string $table): int {
+    $pdo = db();
+    if (DB_DRIVER === 'pgsql') {
+        return (int)$pdo->lastInsertId($table . '_id_seq');
+    }
+    return (int)$pdo->lastInsertId();
+}
+
 /* Lê e valida um array de produtos enviado como JSON pelo formulário */
 function parse_products_json(?string $json): array {
     $arr = json_decode($json ?? '[]', true);

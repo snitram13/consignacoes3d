@@ -69,6 +69,14 @@ function ensure_catalog_table(): void {
             price REAL NOT NULL DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )");
+    } elseif (DB_DRIVER === 'pgsql') {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS catalog (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            name VARCHAR(160) NOT NULL,
+            price REAL NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )");
     } else {
         $pdo->exec("CREATE TABLE IF NOT EXISTS catalog (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -82,17 +90,12 @@ function ensure_catalog_table(): void {
     $done = true;
 }
 
-/* Devolve o catálogo do utilizador, ordenado por nome */
+/* Devolve o catálogo do utilizador, ordenado por nome (sem distinção de maiúsculas) */
 function get_catalog(int $userId): array {
     ensure_catalog_table();
-    $st = db()->prepare('SELECT * FROM catalog WHERE user_id = ? ORDER BY name COLLATE NOCASE');
-    try {
-        $st->execute([$userId]);
-    } catch (Exception $e) {
-        // MySQL não conhece COLLATE NOCASE
-        $st = db()->prepare('SELECT * FROM catalog WHERE user_id = ? ORDER BY name');
-        $st->execute([$userId]);
-    }
+    $order = DB_DRIVER === 'sqlite' ? 'name COLLATE NOCASE' : 'LOWER(name)';
+    $st = db()->prepare('SELECT * FROM catalog WHERE user_id = ? ORDER BY ' . $order);
+    $st->execute([$userId]);
     return $st->fetchAll();
 }
 

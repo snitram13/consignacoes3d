@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $stm = $pdo->prepare('INSERT INTO movements (client_id, type, mov_date, rec_id, comm_rate, total_sold, commission_value, net_value, signature) VALUES (?,?,?,?,?,?,?,?,?)');
             $stm->execute([$c['id'], 'acerto', $date, gen_rec_id(), $rate, $totalSold, $commVal, $netVal, $sig]);
-            $movId = (int)$pdo->lastInsertId();
+            $movId = db_last_id('movements');
 
             $sti = $pdo->prepare('INSERT INTO movement_items (movement_id, kind, name, qty, price) VALUES (?,?,?,?,?)');
             foreach ($vendas as $v)    $sti->execute([$movId, 'vendido', $v['name'], $v['qty'], $v['price']]);

@@ -10,9 +10,15 @@ function db(): PDO {
             }
             $pdo = new PDO('sqlite:' . DB_SQLITE_PATH);
             $pdo->exec('PRAGMA foreign_keys = ON');
+        } elseif (DB_DRIVER === 'pgsql') {
+            // PostgreSQL (ex.: Supabase). Supabase exige SSL.
+            $dsn = 'pgsql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . DB_NAME . ';sslmode=' . DB_SSLMODE;
+            $pdo = new PDO($dsn, DB_USER, DB_PASS);
+            // prepares emulados → compatível com o connection pooler do Supabase
+            $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, true);
         } else {
             $pdo = new PDO(
-                'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
+                'mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . DB_NAME . ';charset=utf8mb4',
                 DB_USER,
                 DB_PASS
             );

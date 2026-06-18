@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 trim($_POST['nif'] ?? ''), trim($_POST['phone'] ?? ''), trim($_POST['email'] ?? ''),
                 $comm, $date,
             ]);
-            $clientId = (int)$pdo->lastInsertId();
+            $clientId = db_last_id('clients');
 
             $stp = $pdo->prepare('INSERT INTO products (client_id, name, qty, price) VALUES (?,?,?,?)');
             foreach ($prods as $p) {
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $rate = $comm ?? (float)$u['commission'];
             $stm = $pdo->prepare('INSERT INTO movements (client_id, type, mov_date, rec_id, comm_rate, signature) VALUES (?,?,?,?,?,?)');
             $stm->execute([$clientId, 'entrega', $date, gen_rec_id(), $rate, $sig]);
-            $movId = (int)$pdo->lastInsertId();
+            $movId = db_last_id('movements');
 
             $sti = $pdo->prepare('INSERT INTO movement_items (movement_id, kind, name, qty, price) VALUES (?,?,?,?,?)');
             foreach ($prods as $p) {
