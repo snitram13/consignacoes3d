@@ -2,7 +2,7 @@
 # Painel: New + → Blueprint → escolhe este repo.
 #
 # Base de dados: PostgreSQL no Supabase (grátis e permanente).
-# O Render só serve o PHP; os dados ficam no Supabase.
+# Usamos variáveis SEPARADAS (à prova de caracteres especiais na palavra-passe).
 services:
   - type: web
     name: consignacoes-3d
@@ -12,9 +12,20 @@ services:
     envVars:
       - key: APP_NAME
         value: Consignações 3D
-      - key: DATABASE_URL
-        sync: false            # ← cola aqui a connection string do Supabase (Settings → Database)
-                               #    Usa a versão "IPv4 / Session pooler" (porta 5432)
+      # ── Supabase (Session pooler, IPv4) ──
+      - key: DB_DRIVER
+        value: pgsql
+      - key: DB_PORT
+        value: "5432"          # Session pooler (NÃO 6543)
+      - key: DB_NAME
+        value: postgres
+      - key: DB_HOST
+        sync: false            # ← ex.: aws-1-eu-central-1.pooler.supabase.com
+      - key: DB_USER
+        sync: false            # ← ex.: postgres.bgfbqaqigbvshhuhashw
+      - key: DB_PASS
+        sync: false            # ← a tua password do Supabase (crua, tal como é)
+      # ── Email (Gmail) ──
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT
@@ -22,4 +33,4 @@ services:
       - key: SMTP_USER
         value: fivelayers3d@gmail.com
       - key: SMTP_PASS
-        sync: false            # ← palavra-passe de app do Gmail — define no painel, não fica no Git
+        sync: false            # ← palavra-passe de app do Gmail

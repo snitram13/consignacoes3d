@@ -11,14 +11,14 @@ A app já está pronta (Docker + render.yaml + suporte a Postgres testado).
 ## 1. Base de dados no Supabase
 1. Cria conta em https://supabase.com → **New project** (escolhe uma região da Europa,
    ex.: *Frankfurt*). Guarda a **Database Password** que defines aqui.
-2. No projeto: **Connect** (ou Settings → Database) → secção **Connection string** →
-   separador **URI**.
-3. Escolhe a versão **"Session pooler"** (diz *IPv4 compatible*) — é a que funciona no
-   Render. Copia o URI, algo como:
-   ```
-   postgresql://postgres.xxxxx:[A-TUA-PASSWORD]@aws-0-eu-central-1.pooler.supabase.com:5432/postgres
-   ```
-   Substitui `[A-TUA-PASSWORD]` pela password do passo 1. **Guarda este URI** — é o `DATABASE_URL`.
+2. No projeto: **Connect** (ou Settings → Database) → escolhe **"Session pooler"**
+   (diz *IPv4 compatible*, porta **5432** — é a que funciona no Render).
+3. Anota destes valores (vais pô-los no Render como variáveis separadas):
+   - **host** → ex.: `aws-1-eu-central-1.pooler.supabase.com`
+   - **port** → `5432`
+   - **database** → `postgres`
+   - **user** → `postgres.<ref-do-projeto>`
+   - **password** → a password do passo 1
 
 > As tabelas são criadas sozinhas no primeiro acesso ao `install.php`. Não precisas de SQL.
 
@@ -33,9 +33,12 @@ git push -u origin main
 ## 3. Serviço no Render
 1. https://render.com → regista-te (podes entrar com o GitHub)
 2. **New + → Blueprint** → escolhe o repositório `consignacoes-3d`
-3. O Render lê o `render.yaml` e pede os 2 segredos (`sync: false`). Define:
-   - **DATABASE_URL** = o URI do Supabase (passo 1)
-   - **SMTP_PASS** = a tua palavra-passe de app do Gmail (16 letras, de myaccount.google.com/apppasswords)
+3. O Render lê o `render.yaml` e pede os segredos (`sync: false`). Define:
+   - **DB_HOST** = host do Supabase (ex.: `aws-1-eu-central-1.pooler.supabase.com`)
+   - **DB_USER** = `postgres.<ref-do-projeto>`
+   - **DB_PASS** = a password do Supabase (crua, tal como é)
+   - **SMTP_PASS** = a tua palavra-passe de app do Gmail (de myaccount.google.com/apppasswords)
+   (DB_DRIVER, DB_PORT=5432, DB_NAME já vêm preenchidos do `render.yaml`.)
 4. **Apply / Create** → espera o build (~3-5 min)
 
 ## 4. Primeiro arranque

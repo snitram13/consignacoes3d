@@ -24,14 +24,17 @@ $envv = function (string $k, string $default = ''): string {
 // Se existir, é o caminho mais simples — preenche tudo automaticamente.
 $dbUrl = getenv('DATABASE_URL');
 if ($dbUrl && !defined('DB_DRIVER')) {
-    $p = parse_url($dbUrl);
-    $scheme = $p['scheme'] ?? 'pgsql';
-    define('DB_DRIVER', ($scheme === 'postgres' || $scheme === 'postgresql') ? 'pgsql' : $scheme);
-    if (!defined('DB_HOST') && isset($p['host'])) define('DB_HOST', $p['host']);
-    if (!defined('DB_PORT') && isset($p['port'])) define('DB_PORT', (int)$p['port']);
-    if (!defined('DB_NAME') && isset($p['path'])) define('DB_NAME', ltrim($p['path'], '/'));
-    if (!defined('DB_USER') && isset($p['user'])) define('DB_USER', urldecode($p['user']));
-    if (!defined('DB_PASS') && isset($p['pass'])) define('DB_PASS', urldecode($p['pass']));
+    // Análise robusta: aguenta caracteres especiais (/, @, #, …) na palavra-passe.
+    // Formato: scheme://utilizador:palavra-passe@host:porta/base
+    if (preg_match('#^(\w+)://([^:@]+):(.*)@([^:/@]+):(\d+)/([^?\s]+)#', $dbUrl, $mm)) {
+        $scheme = strtolower($mm[1]);
+        define('DB_DRIVER', ($scheme === 'postgres' || $scheme === 'postgresql') ? 'pgsql' : $scheme);
+        if (!defined('DB_USER')) define('DB_USER', $mm[2]);
+        if (!defined('DB_PASS')) define('DB_PASS', $mm[3]);   // crua, sem descodificar
+        if (!defined('DB_HOST')) define('DB_HOST', $mm[4]);
+        if (!defined('DB_PORT')) define('DB_PORT', (int)$mm[5]);
+        if (!defined('DB_NAME')) define('DB_NAME', $mm[6]);
+    }
 }
 
 if (!defined('DB_DRIVER'))      define('DB_DRIVER', $envv('DB_DRIVER', 'sqlite'));   // 'pgsql', 'mysql' ou 'sqlite'
