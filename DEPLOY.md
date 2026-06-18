@@ -1,60 +1,55 @@
-# Pôr no ar no Render
+# Pôr no ar: Render (app) + Supabase (base de dados)
 
-A app já está pronta (Docker + render.yaml + segredos por variáveis de ambiente).
-O link final é **um só** e funciona no **computador e no telemóvel** (de qualquer lado):
-`https://consignacoes-3d.onrender.com` (o nome exato é gerado no deploy).
+Arquitetura: o **Render** serve o PHP (grátis) e o **Supabase** guarda os dados em
+PostgreSQL (grátis e permanente). O link final é **um só** e funciona no **computador
+e no telemóvel** de qualquer lado: `https://consignacoes-3d.onrender.com`.
 
----
-
-## ⚠️ Importante: onde ficam os dados
-
-No Render **grátis** o disco é apagado a cada novo deploy/reinício → com SQLite os
-clientes/stock/recibos **perdem-se**. Escolhe uma opção:
-
-| Opção | Custo | Dados | Para quê |
-|---|---|---|---|
-| **A. Grátis + SQLite** | 0€ | ❌ apagados a cada deploy | só demonstração |
-| **B. Starter + disco** | ~7$/mês | ✅ permanentes | uso real (recomendado) |
-| **C. Grátis + MySQL externo** | 0€ | ✅ permanentes | uso real sem pagar (mais passos) |
-
-Para a **opção B**: no `render.yaml` muda `plan: free` → `plan: starter` e descomenta o
-bloco `disk:`. Os dados passam a viver no disco montado em `/var/www/html/data`.
+A app já está pronta (Docker + render.yaml + suporte a Postgres testado).
 
 ---
 
-## Passos
+## 1. Base de dados no Supabase
+1. Cria conta em https://supabase.com → **New project** (escolhe uma região da Europa,
+   ex.: *Frankfurt*). Guarda a **Database Password** que defines aqui.
+2. No projeto: **Connect** (ou Settings → Database) → secção **Connection string** →
+   separador **URI**.
+3. Escolhe a versão **"Session pooler"** (diz *IPv4 compatible*) — é a que funciona no
+   Render. Copia o URI, algo como:
+   ```
+   postgresql://postgres.xxxxx:[A-TUA-PASSWORD]@aws-0-eu-central-1.pooler.supabase.com:5432/postgres
+   ```
+   Substitui `[A-TUA-PASSWORD]` pela password do passo 1. **Guarda este URI** — é o `DATABASE_URL`.
 
-### 1. Pôr o código no GitHub
+> As tabelas são criadas sozinhas no primeiro acesso ao `install.php`. Não precisas de SQL.
+
+## 2. Código no GitHub
 ```bash
-cd "consignacoes-php"
-# repositório já iniciado e com 1 commit
+cd "consignacoes-php"          # já tem repositório Git com commits
 git remote add origin https://github.com/<o-teu-utilizador>/consignacoes-3d.git
 git push -u origin main
 ```
 (Cria primeiro o repositório vazio em github.com → New repository → "consignacoes-3d".)
 
-### 2. Criar o serviço no Render
-1. Entra em https://render.com (regista-te, dá para entrar com o GitHub)
+## 3. Serviço no Render
+1. https://render.com → regista-te (podes entrar com o GitHub)
 2. **New + → Blueprint** → escolhe o repositório `consignacoes-3d`
-3. O Render lê o `render.yaml` e cria o serviço automaticamente
+3. O Render lê o `render.yaml` e pede os 2 segredos (`sync: false`). Define:
+   - **DATABASE_URL** = o URI do Supabase (passo 1)
+   - **SMTP_PASS** = `REMOVIDO` (palavra-passe de app do Gmail)
+4. **Apply / Create** → espera o build (~3-5 min)
 
-### 3. Definir o segredo do email
-No serviço criado → **Environment** → confirma/define:
-- `SMTP_PASS` = `REMOVIDO`  (a palavra-passe de app do Gmail)
-
-(As outras variáveis já vêm do `render.yaml`.)
-
-### 4. Primeiro arranque
-- Espera o build (~2-4 min). No fim tens o link `https://...onrender.com`
+## 4. Primeiro arranque
+- No fim tens o link `https://...onrender.com`
 - Abre `https://...onrender.com/install.php` → cria a tua conta de acesso
-- Pronto. Esse link serve para o computador **e** para o telemóvel.
+- Pronto! Esse link serve para o **computador e o telemóvel**.
 
 ---
 
 ## Notas
-- **Grátis**: o serviço "adormece" após 15 min sem uso; o primeiro acesso seguinte
-  demora ~1 min a acordar. Os planos pagos ficam sempre ligados.
-- O `config.local.php` (segredos locais) e a base SQLite **nunca** vão para o Git.
-- Para mudar para MySQL (opção C): define no Render `DB_DRIVER=mysql`, `DB_HOST`,
-  `DB_NAME`, `DB_USER`, `DB_PASS` do teu fornecedor de MySQL. As tabelas criam-se
-  sozinhas no `install.php`.
+- **Grátis no Render**: o serviço "adormece" após 15 min sem uso; o 1.º acesso seguinte
+  demora ~1 min a acordar. (Plano pago fica sempre ligado.)
+- **Supabase grátis**: o projeto pausa após ~1 semana sem qualquer atividade; se isso
+  acontecer, basta reativá-lo no painel.
+- Segredos (`config.local.php`, password do Gmail, `DATABASE_URL`) **nunca** vão para o
+  Git — ficam só em variáveis de ambiente.
+- Localmente continuas a usar SQLite (via `config.local.php`), sem precisares do Supabase.
