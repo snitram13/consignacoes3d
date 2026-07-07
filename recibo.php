@@ -59,13 +59,13 @@ $mailto = 'mailto:' . rawurlencode($m['c_email'] ?? '') .
     '&body=' . rawurlencode($body) .
     ($u['email'] ? '&cc=' . rawurlencode($u['email']) : '');
 
-/* ── WhatsApp: link direto para o número da ficha do cliente, com a ligação do recibo ── */
+/* ── WhatsApp: envia o PDF do recibo como ficheiro (partilha nativa no telemóvel).
+      O link público fica como alternativa (computador / se a partilha falhar). ── */
 $reciboUrl = recibo_public_url((int)$m['id'], $u);
 $waNumber  = wa_number($m['c_phone'] ?? '');
 $remetente = $u['brand'] ?: ($u['name'] ?: APP_NAME);
 $waText    = 'Olá ' . $m['c_name'] . "! 👋\n"
-    . 'Segue o recibo da consignação — Nº ' . $m['rec_id'] . ' (' . fmt_date($m['mov_date']) . ").\n"
-    . 'Ver e guardar o PDF: ' . $reciboUrl . "\n\n"
+    . 'Segue o recibo da consignação — Nº ' . $m['rec_id'] . ' (' . fmt_date($m['mov_date']) . ").\n\n"
     . $remetente;
 ?>
 <!DOCTYPE html>
@@ -97,8 +97,9 @@ $waText    = 'Olá ' . $m['c_name'] . "! 👋\n"
 <div id="toast" style="position:fixed;left:50%;bottom:90px;transform:translateX(-50%);max-width:88%;background:#1a1a1a;color:#fff;padding:12px 16px;border-radius:12px;font-size:14px;line-height:1.4;box-shadow:0 8px 30px rgba(0,0,0,.3);z-index:9999;display:none;text-align:center"></div>
 <script>
 const WA_NUMBER  = <?= json_encode($waNumber) ?>;   // número do cliente já normalizado (só dígitos + indicativo)
-const WA_TEXT    = <?= json_encode($waText) ?>;      // mensagem com o link do recibo
-const RECIBO_URL = <?= json_encode($reciboUrl) ?>;
+const WA_TEXT    = <?= json_encode($waText) ?>;      // legenda que acompanha o PDF
+const RECIBO_URL = <?= json_encode($reciboUrl) ?>;   // link público (alternativa no computador)
+const PDF_NAME   = <?= json_encode('Recibo_' . preg_replace('/[^\w\-]+/', '_', $m['rec_id']) . '_' . date('d-m-Y', strtotime($m['mov_date'])) . '.pdf') ?>;
 
 /* mensagem visível no ecrã (não depende de alert, que pode estar bloqueado) */
 let toastTimer = null;
@@ -120,19 +121,97 @@ function imprimirRecibo() {
   }
 }
 
-/* Envio pelo WhatsApp: abre a conversa no número da ficha do cliente com uma
-   mensagem já preenchida + o link do recibo (o cliente abre e guarda o PDF).
-   Se o cliente não tiver telefone, abre o WhatsApp para escolher o contacto. */
-function enviarWhatsApp() {
-  const base = WA_NUMBER ? ('https://wa.me/' + WA_NUMBER) : 'https://wa.me/';
-  const url  = base + '?text=' + encodeURIComponent(WA_TEXT);
-  if (!WA_NUMBER) {
-    toast('Este cliente não tem telefone na ficha — escolha o contacto no WhatsApp. O link do recibo já vai na mensagem.', 7000);
-  } else {
-    toast('A abrir o WhatsApp do cliente com o link do recibo…', 5000);
-  }
-  window.open(url, '_blank');
+/* carrega a biblioteca de PDF só quando é precisa */
+let html2pdfLoading = null;
+function loadHtml2pdf() {
+  if (window.html2pdf) return Promise.resolve();
+  if (html2pdfLoading) return html2pdfLoading;
+  html2pdfLoading = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js';
+    s.onload = res;
+    s.onerror = () => { html2pdfLoading = null; rej(new Error('sem ligação à internet ou CDN indisponível')); };
+    document.head.appendChild(s);
+  });
+  return html2pdfLoading;
 }
+
+/* gera o PDF (só a via do cliente) a partir do próprio recibo no ecrã */
+async function gerarPDF() {
+  await loadHtml2pdf();
+  const el = document.querySelector('.via--cliente');
+  const blob = await html2pdf().set({
+    margin: 8,
+    image: { type: 'jpeg', quality: 0.95 },
+    html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  }).from(el).outputPdf('blob');
+  return new File([blob], PDF_NAME, { type: 'application/pdf' });
+}
+
+/* pré-gera o PDF: o Safari recusa a partilha se houver demora após o toque */
+let pdfPromise = null;
+function prepararPDF() {
+  if (!pdfPromise) {
+    pdfPromise = gerarPDF().catch(e => {
+      pdfPromise = null;
+      console.warn('Não foi possível gerar o PDF do recibo:', e);
+      return null;
+    });
+  }
+  return pdfPromise;
+}
+
+function descarregarPDF(pdf) {
+  const url = URL.createObjectURL(pdf);
+  const a = document.createElement('a');
+  a.href = url; a.download = PDF_NAME;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+/* Enviar por WhatsApp: partilha o FICHEIRO PDF real. No telemóvel abre a folha
+   de partilha → escolhes o WhatsApp e o contacto, e vai o PDF anexado.
+   (O WhatsApp não permite anexar ficheiro E escolher o número por um site — só
+   a API paga; por isso o contacto é escolhido por ti.) No computador, descarrega
+   o PDF e abre o WhatsApp com o link como alternativa. */
+async function enviarWhatsApp() {
+  const btn = document.getElementById('wa-btn');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ A preparar o PDF…';
+  toast('A gerar o recibo em PDF…', 8000);
+
+  const pdf = await prepararPDF();
+
+  btn.disabled = false;
+  btn.textContent = label;
+
+  // Telemóvel: partilha o ficheiro PDF real → escolhe o WhatsApp e o contacto
+  if (pdf && navigator.canShare && navigator.canShare({ files: [pdf] })) {
+    try {
+      await navigator.share({ files: [pdf], text: WA_TEXT });
+      toast('Escolha o WhatsApp e o contacto para enviar o PDF.', 5000);
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;   // o utilizador cancelou
+    }
+  }
+
+  // Computador (sem partilha de ficheiros): descarrega o PDF e abre o WhatsApp
+  if (pdf) {
+    descarregarPDF(pdf);
+    toast('PDF descarregado (' + PDF_NAME + '). A abrir o WhatsApp — arraste o PDF para a conversa.', 8000);
+  } else {
+    toast('Não foi possível gerar o PDF (sem internet?). A abrir o WhatsApp com o link.', 6000);
+  }
+  const waUrl = (WA_NUMBER ? ('https://wa.me/' + WA_NUMBER) : 'https://wa.me/')
+    + '?text=' + encodeURIComponent(WA_TEXT + '\n\nRecibo online: ' + RECIBO_URL);
+  setTimeout(() => window.open(waUrl, '_blank'), pdf ? 1200 : 200);
+}
+
+/* pré-gera o PDF assim que a página abre, para o envio ser imediato ao toque */
+prepararPDF();
 </script>
 </body>
 </html>
