@@ -23,12 +23,14 @@ function recibo_erro(string $msg, int $http = 404): void {
 $id    = (int)($_GET['id'] ?? 0);
 $token = (string)($_GET['t'] ?? '');
 
-$data = $id ? recibo_load($id) : null;
-if (!$data) recibo_erro('Recibo não encontrado ou já removido.');
-
-$m = $data['m'];
-$u = recibo_user((int)$m['user_id']);
-if (!$u) recibo_erro('Recibo não encontrado ou já removido.');
+try {
+    $data = $id ? recibo_load($id) : null;
+    $m = $data['m'] ?? null;
+    $u = $m ? recibo_user((int)$m['user_id']) : null;
+} catch (Throwable $e) {
+    recibo_erro('Serviço temporariamente indisponível. Tente de novo daqui a um minuto.', 503);
+}
+if (!$data || !$m || !$u) recibo_erro('Recibo não encontrado ou já removido.');
 
 /* Autorização por token (assinatura estável do recibo) */
 if ($token === '' || !hash_equals(receipt_token($id, $u), $token)) {
