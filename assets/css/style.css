@@ -80,6 +80,8 @@ input[type=checkbox]{width:auto;-webkit-appearance:checkbox}
 .btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
 .btn-ghost{background:none;color:var(--text2);border:1.5px solid var(--border)}
 .btn-danger{background:var(--red-bg);color:var(--red)}
+.btn-whatsapp{background:#25D366;color:#fff;box-shadow:0 2px 8px rgba(37,211,102,.35)}
+.btn-whatsapp:hover{box-shadow:0 4px 14px rgba(37,211,102,.45)}
 .btn+.btn,form+.btn,.btn+form,a.btn{margin-top:9px}
 .btn[disabled]{opacity:.6;cursor:default}
 

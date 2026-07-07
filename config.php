@@ -49,6 +49,11 @@ if (!defined('DB_SSLMODE'))     define('DB_SSLMODE', $envv('DB_SSLMODE', 'requir
 // ── Geral ──
 if (!defined('APP_NAME'))     define('APP_NAME', $envv('APP_NAME', 'Consignações 3D'));
 if (!defined('COMM_DEFAULT')) define('COMM_DEFAULT', (float)$envv('COMM_DEFAULT', '0.20')); // comissão padrão (20%)
+// Chave para assinar links públicos de recibo (opcional; se vazia, deriva-se da conta).
+if (!defined('APP_SECRET'))   define('APP_SECRET', $envv('APP_SECRET', ''));
+// Indicativo de país por omissão para números locais no link do WhatsApp.
+// '351' = Portugal · '55' = Brasil. (Números já com indicativo são respeitados.)
+if (!defined('DEFAULT_CC'))   define('DEFAULT_CC', $envv('DEFAULT_CC', '351'));
 
 // ── Email (SMTP) ──
 if (!defined('SMTP_HOST'))      define('SMTP_HOST', $envv('SMTP_HOST', ''));        // ex.: 'smtp.gmail.com'

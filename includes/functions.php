@@ -72,3 +72,42 @@ function parse_products_json(?string $json): array {
 function valid_signature(?string $sig): bool {
     return is_string($sig) && strpos($sig, 'data:image/png;base64,') === 0 && strlen($sig) < 800000;
 }
+
+/* ── WhatsApp / links de recibo ── */
+
+/* Normaliza um telefone para o formato do wa.me: só dígitos, com indicativo.
+   • remove espaços, traços, parênteses, '+' …
+   • '00xx…'  (prefixo internacional) → 'xx…'
+   • número local PT (9 dígitos começado por 9) → acrescenta o indicativo (351)
+   Se já vier com indicativo, é respeitado. Devolve '' se não houver dígitos. */
+function wa_number(?string $raw, ?string $defaultCC = null): string {
+    $cc = $defaultCC ?? (defined('DEFAULT_CC') ? DEFAULT_CC : '351');
+    $n = preg_replace('/\D+/', '', (string)($raw ?? ''));
+    if ($n === '') return '';
+    if (str_starts_with($n, '00')) $n = substr($n, 2);           // 00xx… → xx…
+    if (strlen($n) === 9 && $n[0] === '9') $n = $cc . $n;         // local PT → +indicativo
+    return $n;
+}
+
+/* Assinatura estável de um link público de recibo (impede adivinhar recibos de outros).
+   Usa APP_SECRET se existir; senão deriva do hash da conta (secreto e já em BD). */
+function receipt_token(int $movementId, array $u): string {
+    $key = (defined('APP_SECRET') && APP_SECRET !== '')
+        ? APP_SECRET
+        : (string)($u['password_hash'] ?? APP_NAME);
+    return substr(hash_hmac('sha256', 'recibo:' . $movementId, $key), 0, 24);
+}
+
+/* URL base do pedido atual (aguenta o proxy do Render, que usa X-Forwarded-Proto). */
+function base_url(): string {
+    $proto = $_SERVER['HTTP_X_FORWARDED_PROTO']
+        ?? ((($_SERVER['HTTPS'] ?? '') === 'on') ? 'https' : ($_SERVER['REQUEST_SCHEME'] ?? 'http'));
+    $proto = explode(',', $proto)[0];               // "https,http" → "https"
+    $host  = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    return $proto . '://' . $host;
+}
+
+/* Link público (com token) para a página do recibo — o que vai na mensagem de WhatsApp. */
+function recibo_public_url(int $movementId, array $u): string {
+    return base_url() . '/r.php?id=' . $movementId . '&t=' . receipt_token($movementId, $u);
+}
