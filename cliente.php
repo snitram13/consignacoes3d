@@ -69,9 +69,10 @@ require __DIR__ . '/includes/layout_header.php';
       </div>
     <?php endforeach; ?>
   <?php else: ?>
-    <p class="hint" style="padding:8px 0;margin:0">Sem produtos em consignação.</p>
+    <p class="hint" style="padding:8px 0;margin:0">Ainda sem produtos em consignação.</p>
   <?php endif; ?>
 </div>
+<?php if ($products): ?>
 <div class="mini-hero">
   <div class="mh-label">A receber (se tudo vender)</div>
   <div class="mh-value"><?= fmt($totalVal - $totalCom) ?></div>
@@ -80,6 +81,9 @@ require __DIR__ . '/includes/layout_header.php';
     <span class="hero-chip">✂️ Comissão <?= comm_pct($rate) ?>%: <?= fmt($totalCom) ?></span>
   </div>
 </div>
+<?php else: ?>
+<a class="btn btn-primary" href="entrega.php?id=<?= (int)$c['id'] ?>" style="margin-top:14px">📦 Registar entrega de produtos</a>
+<?php endif; ?>
 
 <?php if ($movements): ?>
 <div class="section-title">Histórico</div>
@@ -111,7 +115,9 @@ require __DIR__ . '/includes/layout_header.php';
     <button class="btn btn-primary" type="submit">Guardar comissão</button>
   </form>
 </details>
+<?php if ($products): ?>
 <a class="btn btn-primary" href="acerto.php?id=<?= (int)$c['id'] ?>">📤 Registar visita / acerto</a>
+<?php endif; /* sem stock: a entrega está no CTA em destaque acima */ ?>
 <a class="btn btn-secondary" href="<?= esc($mailto) ?>">📧 Enviar ficha por email</a>
 <form method="post" action="excluir_cliente.php" onsubmit="return confirm('Eliminar <?= esc($c['name']) ?>?\nEsta ação não pode ser desfeita.')">
   <?= csrf_field() ?>

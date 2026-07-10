@@ -13,9 +13,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $commP = str_replace(',', '.', (string)($_POST['comm'] ?? ''));
     $comm  = is_numeric($commP) && $commP >= 0 && $commP <= 100 ? ((float)$commP) / 100 : null;
 
-    if ($name === '' || !$prods) {
-        $error = 'Preencha o nome do cliente e pelo menos um produto.';
-    } elseif (!valid_signature($sig)) {
+    if ($name === '') {
+        $error = 'Preencha o nome do cliente.';
+    } elseif ($prods && !valid_signature($sig)) {
+        // só há entrega (e portanto assinatura) se forem adicionados produtos
         $error = 'Assinatura em falta. Recolha a assinatura do cliente.';
     } else {
         $pdo = db();
@@ -25,33 +26,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st->execute([
                 $u['id'], $name,
                 trim($_POST['nif'] ?? ''), trim($_POST['phone'] ?? ''), trim($_POST['email'] ?? ''),
-                $comm, $date,
+                $comm, $prods ? $date : null,   // sem produtos ⇒ ainda não há entrega/última visita
             ]);
             $clientId = db_last_id('clients');
+            $movId = null;
 
-            $stp = $pdo->prepare('INSERT INTO products (client_id, name, qty, price) VALUES (?,?,?,?)');
-            foreach ($prods as $p) {
-                $stp->execute([$clientId, $p['name'], $p['qty'], $p['price']]);
-            }
+            if ($prods) {
+                $stp = $pdo->prepare('INSERT INTO products (client_id, name, qty, price) VALUES (?,?,?,?)');
+                foreach ($prods as $p) {
+                    $stp->execute([$clientId, $p['name'], $p['qty'], $p['price']]);
+                }
 
-            $rate = $comm ?? (float)$u['commission'];
-            $stm = $pdo->prepare('INSERT INTO movements (client_id, type, mov_date, rec_id, comm_rate, signature) VALUES (?,?,?,?,?,?)');
-            $stm->execute([$clientId, 'entrega', $date, gen_rec_id(), $rate, $sig]);
-            $movId = db_last_id('movements');
+                $rate = $comm ?? (float)$u['commission'];
+                $stm = $pdo->prepare('INSERT INTO movements (client_id, type, mov_date, rec_id, comm_rate, signature) VALUES (?,?,?,?,?,?)');
+                $stm->execute([$clientId, 'entrega', $date, gen_rec_id(), $rate, $sig]);
+                $movId = db_last_id('movements');
 
-            $sti = $pdo->prepare('INSERT INTO movement_items (movement_id, kind, name, qty, price) VALUES (?,?,?,?,?)');
-            foreach ($prods as $p) {
-                $sti->execute([$movId, 'entregue', $p['name'], $p['qty'], $p['price']]);
+                $sti = $pdo->prepare('INSERT INTO movement_items (movement_id, kind, name, qty, price) VALUES (?,?,?,?,?)');
+                foreach ($prods as $p) {
+                    $sti->execute([$movId, 'entregue', $p['name'], $p['qty'], $p['price']]);
+                }
             }
 
             $pdo->commit();
 
-            /* regista no catálogo os produtos entregues */
-            foreach ($prods as $p) {
-                catalog_upsert((int)$u['id'], $p['name'], (float)$p['price']);
+            if ($prods) {
+                /* regista no catálogo os produtos entregues */
+                foreach ($prods as $p) {
+                    catalog_upsert((int)$u['id'], $p['name'], (float)$p['price']);
+                }
+                redirect('recibo.php?id=' . $movId);
             }
 
-            redirect('recibo.php?id=' . $movId);
+            /* só o cliente foi guardado — segue para a ficha, onde pode registar a entrega */
+            redirect('cliente.php?id=' . $clientId);
         } catch (Exception $e) {
             $pdo->rollBack();
             $error = 'Erro ao guardar: ' . $e->getMessage();
@@ -75,7 +83,7 @@ require __DIR__ . '/includes/layout_header.php';
   <div class="steps">
     <div class="step active"><span class="step-n">1</span>Dados</div>
     <div class="step-line"></div>
-    <div class="step active"><span class="step-n">2</span>Produtos</div>
+    <div class="step"><span class="step-n">2</span>Produtos <span class="hint">(opcional)</span></div>
     <div class="step-line"></div>
     <div class="step"><span class="step-n">3</span>Assinatura</div>
   </div>
@@ -91,7 +99,8 @@ require __DIR__ . '/includes/layout_header.php';
   <div class="field"><label>Comissão para este cliente (%)</label><input type="number" name="comm" min="0" max="100" step="0.5" inputmode="decimal" value="<?= esc($defaultComm) ?>"></div>
 
   <hr>
-  <div class="section-title">Produtos em consignação</div>
+  <div class="section-title">Produtos em consignação <span class="hint">(opcional)</span></div>
+  <p class="hint" style="margin:-4px 0 12px">Pode guardar só o cliente agora e registar a entrega dos produtos mais tarde.</p>
   <div id="nc-prod-list"></div>
   <div class="run-total" id="nc-total" style="display:none"><span id="nc-total-count"></span><strong id="nc-total-val"></strong></div>
   <div class="add-box">
@@ -114,7 +123,8 @@ require __DIR__ . '/includes/layout_header.php';
     <button type="button" class="btn btn-secondary" style="margin-top:10px" onclick="addProd()">+ Adicionar produto</button>
   </div>
 
-  <button type="button" class="btn btn-primary" style="margin-top:20px" onclick="goSig()">✍️ Avançar para assinatura</button>
+  <button type="button" class="btn btn-primary" id="nc-primary" style="margin-top:20px" onclick="submitForm()">💾 Guardar cliente</button>
+  <p class="hint" id="nc-primary-hint" style="text-align:center;margin-top:8px">Pode guardar já e adicionar produtos mais tarde.</p>
 </form>
 
 <?php require __DIR__ . '/includes/sig_overlay.php'; ?>
@@ -135,6 +145,28 @@ function renderProds() {
     document.getElementById('nc-total-count').textContent = totalQty + ' unidade' + (totalQty === 1 ? '' : 's') + ' · ' + prods.length + ' produto' + (prods.length === 1 ? '' : 's');
     document.getElementById('nc-total-val').textContent = fmtEUR(totalVal);
   } else totalEl.style.display = 'none';
+  updatePrimary();
+}
+
+/* O botão principal adapta-se: sem produtos guarda só o cliente; com produtos
+   é preciso a assinatura da entrega. */
+function updatePrimary() {
+  const btn = document.getElementById('nc-primary');
+  const hint = document.getElementById('nc-primary-hint');
+  if (prods.length) {
+    btn.innerHTML = '✍️ Avançar para assinatura';
+    hint.textContent = 'Com produtos, é preciso a assinatura do cliente para a entrega.';
+  } else {
+    btn.innerHTML = '💾 Guardar cliente';
+    hint.textContent = 'Pode guardar já e adicionar produtos mais tarde.';
+  }
+}
+
+function submitForm() {
+  const name = document.getElementById('nc-name').value.trim();
+  if (!name) { alert('Introduza o nome do cliente.'); document.getElementById('nc-name').focus(); return; }
+  if (prods.length) { goSig(); return; }   // com produtos ⇒ recolher assinatura
+  document.getElementById('nc-form').submit();  // só o cliente
 }
 
 function pickFromCatalog(sel, nameId, priceId) {
