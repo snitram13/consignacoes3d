@@ -15,16 +15,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $date = $_POST['date'] ?: date('Y-m-d');
     $sig  = $_POST['signature'] ?? '';
 
-    /* vendas: [{name, vendeu, price}] */
+    /* vendas: [{name, vendeu, devolveu, price}] — o mesmo payload traz vendas e devoluções */
     $vendasRaw = json_decode($_POST['vendas'] ?? '[]', true) ?: [];
     $vendas = [];
+    $devolucoes = [];
     foreach ($vendasRaw as $v) {
-        $name = trim((string)($v['name'] ?? ''));
-        $sold = (int)($v['vendeu'] ?? 0);
+        $name  = trim((string)($v['name'] ?? ''));
+        $sold  = (int)($v['vendeu'] ?? 0);
+        $ret   = (int)($v['devolveu'] ?? 0);
         $price = (float)($v['price'] ?? 0);
-        if ($name !== '' && $sold > 0 && $price >= 0) {
-            $vendas[] = ['name' => $name, 'qty' => $sold, 'price' => $price];
-        }
+        if ($name === '' || $price < 0) continue;
+        if ($sold > 0) $vendas[]     = ['name' => $name, 'qty' => $sold, 'price' => $price];
+        if ($ret  > 0) $devolucoes[] = ['name' => $name, 'qty' => $ret,  'price' => $price];
     }
     /* stock que permanece (existente − vendido, ajustável) */
     $stockFica = array_values(array_filter(parse_products_json($_POST['stock_fica'] ?? ''), fn($p) => $p['qty'] > 0));
@@ -56,9 +58,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $movId = db_last_id('movements');
 
             $sti = $pdo->prepare('INSERT INTO movement_items (movement_id, kind, name, qty, price) VALUES (?,?,?,?,?)');
-            foreach ($vendas as $v)    $sti->execute([$movId, 'vendido', $v['name'], $v['qty'], $v['price']]);
-            foreach ($reposicao as $p) $sti->execute([$movId, 'reposto', $p['name'], $p['qty'], $p['price']]);
-            foreach ($final as $p)     $sti->execute([$movId, 'stock', $p['name'], $p['qty'], $p['price']]);
+            foreach ($vendas as $v)     $sti->execute([$movId, 'vendido', $v['name'], $v['qty'], $v['price']]);
+            foreach ($devolucoes as $d) $sti->execute([$movId, 'devolvido', $d['name'], $d['qty'], $d['price']]);
+            foreach ($reposicao as $p)  $sti->execute([$movId, 'reposto', $p['name'], $p['qty'], $p['price']]);
+            foreach ($final as $p)      $sti->execute([$movId, 'stock', $p['name'], $p['qty'], $p['price']]);
 
             $pdo->prepare('DELETE FROM products WHERE client_id = ?')->execute([$c['id']]);
             $stp = $pdo->prepare('INSERT INTO products (client_id, name, qty, price) VALUES (?,?,?,?)');
@@ -104,18 +107,13 @@ require __DIR__ . '/includes/layout_header.php';
 
   <div class="field"><label>Data da visita</label><input type="date" name="date" id="ac-date" value="<?= date('Y-m-d') ?>"></div>
 
-  <div class="section-title">① O que foi vendido?</div>
-  <p class="hint">Indique quantas unidades cada produto vendeu desde a última visita.</p>
+  <div class="section-title">① O que foi vendido e devolvido?</div>
+  <p class="hint">Para cada produto, indique quanto <strong>vendeu</strong> e quanto o cliente <strong>devolveu</strong>. O que fica em loja é calculado automaticamente.</p>
   <div id="acerto-vendas"></div>
   <div id="acerto-resumo" style="display:none;margin-bottom:4px"></div>
 
   <hr>
-  <div class="section-title">② Stock que permanece na loja</div>
-  <p class="hint">Calculado automaticamente (em loja − vendido). Ajuste se algo estiver danificado ou for devolvido — 0 unidades = não fica.</p>
-  <div id="acerto-stock"></div>
-
-  <hr>
-  <div class="section-title">③ Reposição — produtos que o cliente deseja</div>
+  <div class="section-title">② Reposição — produtos que o cliente deseja</div>
   <p class="hint">Produtos novos ou mais unidades que vai deixar nesta visita. Ficam registados à parte no recibo.</p>
   <div id="repo-list"></div>
   <div class="run-total" id="repo-total" style="display:none"><span id="repo-total-count"></span><strong id="repo-total-val"></strong></div>
@@ -156,11 +154,11 @@ require __DIR__ . '/includes/layout_header.php';
 const RATE = <?= json_encode($rate) ?>;
 const RATE_PCT = <?= json_encode(comm_pct($rate)) ?>;
 const CLIENT_NAME = <?= json_encode($c['name']) ?>;
-let vendas = <?= json_encode(array_map(fn($p) => ['name' => $p['name'], 'qty' => (int)$p['qty'], 'price' => (float)$p['price'], 'vendeu' => 0], $products)) ?>;
+let vendas = <?= json_encode(array_map(fn($p) => ['name' => $p['name'], 'qty' => (int)$p['qty'], 'price' => (float)$p['price'], 'vendeu' => 0, 'devolveu' => 0], $products)) ?>;
 let stock  = <?= json_encode(array_map(fn($p) => ['name' => $p['name'], 'qty' => (int)$p['qty'], 'price' => (float)$p['price']], $products)) ?>;
 let repo   = []; // reposição: novos produtos que o cliente deseja
 
-/* ── ① vendas ── */
+/* ── ① vendas e devoluções ── */
 function renderVendas() {
   document.getElementById('acerto-vendas').innerHTML = vendas.map((p, i) =>
     '<div class="acerto-prod">' +
@@ -173,19 +171,42 @@ function renderVendas() {
           '<span class="acerto-info">un. = <strong id="avv' + i + '">' + fmtEUR(p.vendeu * p.price) + '</strong></span>' +
         '</div></div>' +
       '<div class="sale-bar"><div class="sale-fill" id="sb' + i + '" style="width:' + (p.qty ? (p.vendeu / p.qty * 100) : 0) + '%"></div></div>' +
+      '<div class="acerto-row" style="margin-top:10px"><span class="acerto-label">Devolveu:</span>' +
+        '<div class="acerto-ctrl">' +
+          '<button type="button" class="acerto-qbtn" onclick="chDevolve(' + i + ',-1)">−</button>' +
+          '<span class="acerto-num" id="ad' + i + '">' + p.devolveu + '</span>' +
+          '<button type="button" class="acerto-qbtn" onclick="chDevolve(' + i + ',1)">+</button>' +
+          '<span class="acerto-info">↩️ ao fornecedor</span>' +
+        '</div></div>' +
+      '<div class="acerto-fica">Fica em loja: <strong id="nf' + i + '">' + (p.qty - p.vendeu - p.devolveu) + '</strong> un.</div>' +
     '</div>'
   ).join('') || '<p class="hint">Sem produtos em loja. Use a reposição abaixo para deixar produtos.</p>';
   updateResumo();
 }
 
+/* Fica em loja = em loja − vendido − devolvido (mantém stock[] pronto para submeter) */
+function syncFica(i) {
+  const fica = vendas[i].qty - vendas[i].vendeu - vendas[i].devolveu;
+  stock[i].qty = fica;
+  const el = document.getElementById('nf' + i);
+  if (el) el.textContent = fica;
+}
+
 function chVenda(i, d) {
-  vendas[i].vendeu = Math.max(0, Math.min(vendas[i].qty, vendas[i].vendeu + d));
+  const max = vendas[i].qty - vendas[i].devolveu;
+  vendas[i].vendeu = Math.max(0, Math.min(max, vendas[i].vendeu + d));
   document.getElementById('av' + i).textContent = vendas[i].vendeu;
   document.getElementById('avv' + i).innerHTML = fmtEUR(vendas[i].vendeu * vendas[i].price);
   document.getElementById('sb' + i).style.width = (vendas[i].qty ? (vendas[i].vendeu / vendas[i].qty * 100) : 0) + '%';
-  // o stock que permanece acompanha automaticamente (mesma posição)
-  stock[i].qty = vendas[i].qty - vendas[i].vendeu;
-  document.getElementById('ns' + i).textContent = stock[i].qty;
+  syncFica(i);
+  updateResumo();
+}
+
+function chDevolve(i, d) {
+  const max = vendas[i].qty - vendas[i].vendeu;
+  vendas[i].devolveu = Math.max(0, Math.min(max, vendas[i].devolveu + d));
+  document.getElementById('ad' + i).textContent = vendas[i].devolveu;
+  syncFica(i);
   updateResumo();
 }
 
@@ -196,37 +217,29 @@ function updateResumo() {
   cta.textContent = fmtEUR(net);
   cta.style.transform = 'scale(1.12)';
   setTimeout(() => { cta.style.transform = ''; }, 150);
+  const devolvidas = vendas.filter(p => p.devolveu > 0);
   const el = document.getElementById('acerto-resumo');
-  if (total > 0) {
-    el.style.display = 'block';
-    el.innerHTML = '<div class="resumo-box">' +
-      '<div class="resumo-title">💰 Acerto desta visita</div>' +
-      vendas.filter(p => p.vendeu > 0).map(p =>
+  if (total > 0 || devolvidas.length) {
+    let html = '<div class="resumo-box"><div class="resumo-title">💰 Acerto desta visita</div>';
+    if (total > 0) {
+      html += vendas.filter(p => p.vendeu > 0).map(p =>
         '<div class="resumo-row"><span>' + p.vendeu + '× ' + escHtml(p.name) + '</span><span>' + fmtEUR(p.vendeu * p.price) + '</span></div>'
       ).join('') +
       '<div class="resumo-com"><span>Comissão (' + RATE_PCT + '%)</span><span>− ' + fmtEUR(com) + '</span></div>' +
-      '<div class="resumo-net"><span>→ Recebe agora</span><span>' + fmtEUR(net) + '</span></div></div>';
+      '<div class="resumo-net"><span>→ Recebe agora</span><span>' + fmtEUR(net) + '</span></div>';
+    } else {
+      html += '<div class="resumo-row"><span>Sem vendas nesta visita</span><span>' + fmtEUR(0) + '</span></div>';
+    }
+    if (devolvidas.length) {
+      html += '<div class="resumo-devtitle">↩️ Devolvido ao fornecedor</div>' +
+        devolvidas.map(p =>
+          '<div class="resumo-row"><span>' + p.devolveu + '× ' + escHtml(p.name) + '</span><span>' + fmtEUR(p.devolveu * p.price) + '</span></div>'
+        ).join('');
+    }
+    html += '</div>';
+    el.style.display = 'block';
+    el.innerHTML = html;
   } else el.style.display = 'none';
-}
-
-/* ── ② stock que permanece ── */
-function renderStock() {
-  document.getElementById('acerto-stock').innerHTML = stock.map((p, i) =>
-    '<div class="qty-block">' +
-      '<div class="qty-name">' + escHtml(p.name) + '</div>' +
-      '<div class="qty-sub">' + fmtEUR(p.price) + '/un.</div>' +
-      '<div class="qty-ctrl">' +
-        '<button type="button" class="qty-btn" onclick="chStock(' + i + ',-1)">−</button>' +
-        '<span class="qty-num" id="ns' + i + '">' + p.qty + '</span>' +
-        '<button type="button" class="qty-btn" onclick="chStock(' + i + ',1)">+</button>' +
-        '<span class="qty-info">unidades ficam em loja</span>' +
-      '</div></div>'
-  ).join('') || '<p class="hint">Sem stock anterior.</p>';
-}
-
-function chStock(i, d) {
-  stock[i].qty = Math.max(0, stock[i].qty + d);
-  document.getElementById('ns' + i).textContent = stock[i].qty;
 }
 
 /* ── catálogo: preenche nome + preço ao escolher ── */
@@ -289,6 +302,11 @@ function goSig() {
     ).join('');
     resumo += '<div class="sig-resumo-total"><span>Recebe agora</span><span>' + fmtEUR(net) + '</span></div>';
   }
+  const devolvidas = vendas.filter(p => p.devolveu > 0);
+  if (devolvidas.length) {
+    resumo += '<div class="sig-resumo-head" style="margin-top:8px">↩️ Devolvido ao fornecedor</div>' +
+      devolvidas.map(p => '<div class="sig-resumo-row"><span>' + p.devolveu + '× ' + escHtml(p.name) + '</span><span>' + fmtEUR(p.devolveu * p.price) + '</span></div>').join('');
+  }
   if (repo.length) {
     resumo += '<div class="sig-resumo-head" style="margin-top:8px">Reposição nesta visita</div>' +
       repo.map(p => '<div class="sig-resumo-row"><span>🆕 ' + p.qty + '× ' + escHtml(p.name) + '</span><span>' + fmtEUR(p.qty * p.price) + '</span></div>').join('');
@@ -313,7 +331,6 @@ function goSig() {
 }
 
 renderVendas();
-renderStock();
 renderRepo();
 </script>
 <?php require __DIR__ . '/includes/layout_footer.php'; ?>

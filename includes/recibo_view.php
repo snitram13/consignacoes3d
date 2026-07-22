@@ -26,11 +26,12 @@ function recibo_load(int $movementId, ?int $userId = null): ?array {
     $items = $sti->fetchAll();
 
     return [
-        'm'         => $m,
-        'vendidos'  => array_values(array_filter($items, fn($i) => $i['kind'] === 'vendido')),
-        'repostos'  => array_values(array_filter($items, fn($i) => $i['kind'] === 'reposto')),
-        'stock'     => array_values(array_filter($items, fn($i) => $i['kind'] === 'stock')),
-        'entregues' => array_values(array_filter($items, fn($i) => $i['kind'] === 'entregue')),
+        'm'          => $m,
+        'vendidos'   => array_values(array_filter($items, fn($i) => $i['kind'] === 'vendido')),
+        'devolvidos' => array_values(array_filter($items, fn($i) => $i['kind'] === 'devolvido')),
+        'repostos'   => array_values(array_filter($items, fn($i) => $i['kind'] === 'reposto')),
+        'stock'      => array_values(array_filter($items, fn($i) => $i['kind'] === 'stock')),
+        'entregues'  => array_values(array_filter($items, fn($i) => $i['kind'] === 'entregue')),
     ];
 }
 
@@ -44,7 +45,7 @@ function recibo_user(int $userId): ?array {
 }
 
 /* Uma via do recibo (HTML). */
-function via(array $m, array $u, array $vendidos, array $repostos, array $stockItems, array $entregues, float $rate, string $titulo, string $copyLabel, string $cls): string {
+function via(array $m, array $u, array $vendidos, array $devolvidos, array $repostos, array $stockItems, array $entregues, float $rate, string $titulo, string $copyLabel, string $cls): string {
     $isAcerto = $m['type'] === 'acerto';
     $h = '<div class="via ' . esc($cls) . '">';
     if ($u['logo']) $h .= '<img class="via-logo" src="' . esc($u['logo']) . '" alt="logo">';
@@ -73,6 +74,12 @@ function via(array $m, array $u, array $vendidos, array $repostos, array $stockI
                 '<div class="via-trow big"><span>Recebido pelo fornecedor</span><span>' . fmt($m['net_value']) . '</span></div></div>';
         } else {
             $h .= '<div class="via-sectitle">Vendas</div><p>Sem vendas nesta visita.</p>';
+        }
+        if ($devolvidos) {
+            $val = 0;
+            foreach ($devolvidos as $i) $val += $i['qty'] * $i['price'];
+            $h .= '<div class="via-sectitle">↩️ Devolvido ao fornecedor nesta visita</div>' . $table($devolvidos, []);
+            $h .= '<div class="via-totals"><div class="via-trow big"><span>Valor devolvido</span><span>' . fmt($val) . '</span></div></div>';
         }
         if ($repostos) {
             $val = 0;

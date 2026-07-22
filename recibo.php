@@ -18,6 +18,7 @@ $sti->execute([$m['id']]);
 $items = $sti->fetchAll();
 
 $vendidos  = array_values(array_filter($items, fn($i) => $i['kind'] === 'vendido'));
+$devolvidos = array_values(array_filter($items, fn($i) => $i['kind'] === 'devolvido'));
 $repostos  = array_values(array_filter($items, fn($i) => $i['kind'] === 'reposto'));
 $stockItems = array_values(array_filter($items, fn($i) => $i['kind'] === 'stock'));
 $entregues = array_values(array_filter($items, fn($i) => $i['kind'] === 'entregue'));
@@ -35,6 +36,14 @@ if ($isAcerto) {
         $linhas[] = 'Total vendido: ' . fmt($m['total_sold']);
         $linhas[] = 'Comissão (' . comm_pct($rate) . '%): ' . fmt($m['commission_value']);
         $linhas[] = '→ Recebido: ' . fmt($m['net_value']);
+        $linhas[] = '';
+    }
+    if ($devolvidos) {
+        $val = 0;
+        foreach ($devolvidos as $i) $val += $i['qty'] * $i['price'];
+        $linhas[] = 'DEVOLVIDO AO FORNECEDOR NESTA VISITA';
+        foreach ($devolvidos as $i) $linhas[] = '  ' . $i['qty'] . '× ' . $i['name'] . ' = ' . fmt($i['qty'] * $i['price']);
+        $linhas[] = 'Valor devolvido: ' . fmt($val);
         $linhas[] = '';
     }
     if ($repostos) {
@@ -84,9 +93,9 @@ $waText    = 'Olá ' . $m['c_name'] . "! 👋\n"
     <div class="topbar-title"><?= esc($isAcerto ? 'Recibo de acerto' : 'Recibo de entrega') ?></div>
   </header>
   <main class="recibo-scroll">
-    <?= via($m, $u, $vendidos, $repostos, $stockItems, $entregues, $rate, $titulo, 'Via do Cliente', 'via--cliente') ?>
+    <?= via($m, $u, $vendidos, $devolvidos, $repostos, $stockItems, $entregues, $rate, $titulo, 'Via do Cliente', 'via--cliente') ?>
     <div class="via-cut">··············· cortar ·······················</div>
-    <?= via($m, $u, $vendidos, $repostos, $stockItems, $entregues, $rate, $titulo, 'Via do Fornecedor', 'via--fornecedor') ?>
+    <?= via($m, $u, $vendidos, $devolvidos, $repostos, $stockItems, $entregues, $rate, $titulo, 'Via do Fornecedor', 'via--fornecedor') ?>
   </main>
   <footer class="recibo-actions">
     <button class="btn btn-secondary" id="print-btn" onclick="imprimirRecibo()">🖨️ Imprimir / PDF</button>

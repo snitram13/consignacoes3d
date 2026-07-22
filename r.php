@@ -58,7 +58,7 @@ $pdfName  = 'Recibo_' . preg_replace('/[^\w\-]+/', '_', $m['rec_id']) . '_' . da
     <div class="topbar-title"><?= esc($marca) ?></div>
   </header>
   <main class="recibo-scroll">
-    <?= via($m, $u, $data['vendidos'], $data['repostos'], $data['stock'], $data['entregues'], $rate, $titulo, 'Via do Cliente', 'via--cliente') ?>
+    <?= via($m, $u, $data['vendidos'], $data['devolvidos'], $data['repostos'], $data['stock'], $data['entregues'], $rate, $titulo, 'Via do Cliente', 'via--cliente') ?>
   </main>
   <footer class="recibo-actions">
     <button class="btn btn-secondary" id="print-btn" onclick="imprimirRecibo()">🖨️ Imprimir</button>
