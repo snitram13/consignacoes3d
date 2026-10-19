@@ -9,6 +9,7 @@ Gestão de consignações (impressões 3D) com clientes, stock, acertos de visit
 - **Clientes** — ficha com NIF, telefone, email, comissão própria e histórico.
 - **Consignações** — entrega inicial de produtos com assinatura do cliente no ecrã.
 - **Acertos de visita** — registo do que vendeu, comissão calculada, novo stock, tudo assinado.
+- **Reavaliação de preços** — baixar (ou subir) o preço de stock que já está na loja, com recibo assinado a mostrar "antes → agora".
 - **Recibos** — duas vias (cliente/fornecedor), impressão/PDF pelo browser, envio por email.
 - **Perfil** — logótipo, marca, dados do fornecedor e comissão padrão.
 - **Tema claro/escuro automático** conforme o sistema.
@@ -61,6 +62,7 @@ consignacoes-php/
 ├── cliente_novo.php        ← novo cliente + produtos + assinatura
 ├── cliente.php             ← ficha do cliente (stock, totais, histórico)
 ├── acerto.php              ← registar visita: vendas, novo stock, assinatura
+├── ajuste.php              ← reavaliar preços do stock em loja, com assinatura
 ├── recibo.php              ← recibo em 2 vias, imprimir/PDF, email
 ├── excluir_cliente.php
 ├── includes/
@@ -82,8 +84,8 @@ consignacoes-php/
 | `users`          | conta de acesso + dados do fornecedor (marca, logo, comissão)  |
 | `clients`        | clientes, comissão própria opcional, última visita             |
 | `products`       | stock atual em consignação por cliente                         |
-| `movements`      | histórico: entregas e acertos, totais, assinatura, nº de recibo|
-| `movement_items` | linhas de cada movimento (entregue / vendido / stock)          |
+| `movements`      | histórico: entregas, acertos e reavaliações de preço (`type`)  |
+| `movement_items` | linhas do movimento (entregue / vendido / stock / antes / depois)|
 
 ## Segurança incluída
 

@@ -22,10 +22,16 @@ $devolvidos = array_values(array_filter($items, fn($i) => $i['kind'] === 'devolv
 $repostos  = array_values(array_filter($items, fn($i) => $i['kind'] === 'reposto'));
 $stockItems = array_values(array_filter($items, fn($i) => $i['kind'] === 'stock'));
 $entregues = array_values(array_filter($items, fn($i) => $i['kind'] === 'entregue'));
+$antes     = array_values(array_filter($items, fn($i) => $i['kind'] === 'antes'));
+$depois    = array_values(array_filter($items, fn($i) => $i['kind'] === 'depois'));
 
 $rate = (float)$m['comm_rate'];
 $isAcerto = $m['type'] === 'acerto';
-$titulo = $isAcerto ? 'Recibo de Consignação · Acerto' : 'Recibo de Consignação · Entrega';
+$isAjuste = $m['type'] === 'ajuste';
+$tipoLabel = $isAcerto ? 'acerto' : ($isAjuste ? 'reavaliação' : 'entrega');
+$titulo = $isAcerto
+    ? 'Recibo de Consignação · Acerto'
+    : ($isAjuste ? 'Recibo de Consignação · Reavaliação de Preços' : 'Recibo de Consignação · Entrega');
 
 /* email com o conteúdo do recibo */
 $linhas = [];
@@ -55,6 +61,22 @@ if ($isAcerto) {
         $linhas[] = 'STOCK QUE PERMANECE EM CONSIGNAÇÃO';
         foreach ($stockItems as $i) $linhas[] = '  ' . $i['qty'] . '× ' . $i['name'] . ' = ' . fmt($i['qty'] * $i['price']);
     }
+} elseif ($isAjuste) {
+    $linhas[] = 'NOVO PREÇO DE VENDA ACORDADO NESTA VISITA';
+    foreach ($antes as $k => $a) {
+        $d = $depois[$k] ?? $a;
+        $linhas[] = '  ' . $a['qty'] . '× ' . $a['name'] . ': ' . fmt($a['price']) . ' → ' . fmt($d['price']);
+    }
+    $linhas[] = '';
+    $linhas[] = 'A mercadoria mantém-se em consignação — só o preço mudou.';
+    if ($stockItems) {
+        $val = 0;
+        foreach ($stockItems as $i) $val += $i['qty'] * $i['price'];
+        $linhas[] = '';
+        $linhas[] = 'STOCK EM CONSIGNAÇÃO APÓS A REAVALIAÇÃO';
+        foreach ($stockItems as $i) $linhas[] = '  ' . $i['qty'] . '× ' . $i['name'] . ' = ' . fmt($i['qty'] * $i['price']);
+        $linhas[] = 'Valor total em loja: ' . fmt($val);
+    }
 } else {
     $linhas[] = 'PRODUTOS ENTREGUES EM CONSIGNAÇÃO';
     foreach ($entregues as $i) $linhas[] = '  ' . $i['qty'] . '× ' . $i['name'] . ' = ' . fmt($i['qty'] * $i['price']);
@@ -82,7 +104,7 @@ $waText    = 'Olá ' . $m['c_name'] . "! 👋\n"
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title><?= esc($isAcerto ? 'Recibo de acerto' : 'Recibo de entrega') ?> · <?= esc($m['rec_id']) ?></title>
+<title>Recibo de <?= esc($tipoLabel) ?> · <?= esc($m['rec_id']) ?></title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 </head>
@@ -90,12 +112,12 @@ $waText    = 'Olá ' . $m['c_name'] . "! 👋\n"
 <div class="recibo-page">
   <header class="topbar recibo-header">
     <a class="topbar-back" href="cliente.php?id=<?= (int)$m['c_id'] ?>">‹ Fechar</a>
-    <div class="topbar-title"><?= esc($isAcerto ? 'Recibo de acerto' : 'Recibo de entrega') ?></div>
+    <div class="topbar-title">Recibo de <?= esc($tipoLabel) ?></div>
   </header>
   <main class="recibo-scroll">
-    <?= via($m, $u, $vendidos, $devolvidos, $repostos, $stockItems, $entregues, $rate, $titulo, 'Via do Cliente', 'via--cliente') ?>
+    <?= via($m, $u, $vendidos, $devolvidos, $repostos, $stockItems, $entregues, $rate, $titulo, 'Via do Cliente', 'via--cliente', $antes, $depois) ?>
     <div class="via-cut">··············· cortar ·······················</div>
-    <?= via($m, $u, $vendidos, $devolvidos, $repostos, $stockItems, $entregues, $rate, $titulo, 'Via do Fornecedor', 'via--fornecedor') ?>
+    <?= via($m, $u, $vendidos, $devolvidos, $repostos, $stockItems, $entregues, $rate, $titulo, 'Via do Fornecedor', 'via--fornecedor', $antes, $depois) ?>
   </main>
   <footer class="recibo-actions">
     <button class="btn btn-secondary" id="print-btn" onclick="imprimirRecibo()">🖨️ Imprimir / PDF</button>

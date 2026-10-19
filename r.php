@@ -39,7 +39,11 @@ if ($token === '' || !hash_equals(receipt_token($id, $u), $token)) {
 
 $rate     = (float)$m['comm_rate'];
 $isAcerto = $m['type'] === 'acerto';
-$titulo   = $isAcerto ? 'Recibo de Consignação · Acerto' : 'Recibo de Consignação · Entrega';
+$isAjuste = $m['type'] === 'ajuste';
+$tipoLbl  = $isAcerto ? 'acerto' : ($isAjuste ? 'reavaliação' : 'entrega');
+$titulo   = $isAcerto
+    ? 'Recibo de Consignação · Acerto'
+    : ($isAjuste ? 'Recibo de Consignação · Reavaliação de Preços' : 'Recibo de Consignação · Entrega');
 $marca    = $u['brand'] ?: ($u['name'] ?: APP_NAME);
 $pdfName  = 'Recibo_' . preg_replace('/[^\w\-]+/', '_', $m['rec_id']) . '_' . date('d-m-Y', strtotime($m['mov_date'])) . '.pdf';
 ?>
@@ -48,7 +52,7 @@ $pdfName  = 'Recibo_' . preg_replace('/[^\w\-]+/', '_', $m['rec_id']) . '_' . da
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title><?= esc($isAcerto ? 'Recibo de acerto' : 'Recibo de entrega') ?> · <?= esc($m['rec_id']) ?></title>
+<title>Recibo de <?= esc($tipoLbl) ?> · <?= esc($m['rec_id']) ?></title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 </head>
@@ -58,7 +62,7 @@ $pdfName  = 'Recibo_' . preg_replace('/[^\w\-]+/', '_', $m['rec_id']) . '_' . da
     <div class="topbar-title"><?= esc($marca) ?></div>
   </header>
   <main class="recibo-scroll">
-    <?= via($m, $u, $data['vendidos'], $data['devolvidos'], $data['repostos'], $data['stock'], $data['entregues'], $rate, $titulo, 'Via do Cliente', 'via--cliente') ?>
+    <?= via($m, $u, $data['vendidos'], $data['devolvidos'], $data['repostos'], $data['stock'], $data['entregues'], $rate, $titulo, 'Via do Cliente', 'via--cliente', $data['antes'], $data['depois']) ?>
   </main>
   <footer class="recibo-actions">
     <button class="btn btn-secondary" id="print-btn" onclick="imprimirRecibo()">🖨️ Imprimir</button>

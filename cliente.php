@@ -88,12 +88,17 @@ require __DIR__ . '/includes/layout_header.php';
 <?php if ($movements): ?>
 <div class="section-title">Histórico</div>
 <div class="panel">
-  <?php foreach (array_slice($movements, 0, 15) as $m): ?>
+  <?php foreach (array_slice($movements, 0, 15) as $m):
+    $ico = $m['type'] === 'acerto' ? '🤝' : ($m['type'] === 'ajuste' ? '🏷️' : '📦');
+    $desc = $m['type'] === 'acerto'
+        ? 'Acerto · recebido ' . fmt($m['net_value'])
+        : ($m['type'] === 'ajuste' ? 'Reavaliação de preços' : 'Entrega inicial');
+  ?>
     <div class="hist-item">
-      <div class="hist-ico"><?= $m['type'] === 'acerto' ? '🤝' : '📦' ?></div>
+      <div class="hist-ico"><?= $ico ?></div>
       <div style="flex:1">
         <?php if ($m['signature']): ?><span class="badge-valid">✓ Validado</span> <?php endif; ?>
-        <span class="hist-desc"><?= $m['type'] === 'acerto' ? 'Acerto · recebido ' . fmt($m['net_value']) : 'Entrega inicial' ?> · Nº <?= esc($m['rec_id']) ?></span>
+        <span class="hist-desc"><?= esc($desc) ?> · Nº <?= esc($m['rec_id']) ?></span>
         <?php if ($m['signature']): ?><br><img class="hist-sig" src="<?= esc($m['signature']) ?>" alt="assinatura"><?php endif; ?>
         <br><a class="hist-recibo-btn" href="recibo.php?id=<?= (int)$m['id'] ?>">🧾 Ver recibo</a>
       </div>
@@ -117,6 +122,7 @@ require __DIR__ . '/includes/layout_header.php';
 </details>
 <?php if ($products): ?>
 <a class="btn btn-primary" href="acerto.php?id=<?= (int)$c['id'] ?>">📤 Registar visita / acerto</a>
+<a class="btn btn-secondary" href="ajuste.php?id=<?= (int)$c['id'] ?>">🏷️ Reavaliar preços do stock</a>
 <?php endif; /* sem stock: a entrega está no CTA em destaque acima */ ?>
 <a class="btn btn-secondary" href="<?= esc($mailto) ?>">📧 Enviar ficha por email</a>
 <form method="post" action="excluir_cliente.php" onsubmit="return confirm('Eliminar <?= esc($c['name']) ?>?\nEsta ação não pode ser desfeita.')">

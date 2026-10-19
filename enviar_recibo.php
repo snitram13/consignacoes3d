@@ -43,7 +43,9 @@ if ($_FILES['pdf']['size'] > 5 * 1024 * 1024) fail('pdf_too_big', 'PDF demasiado
 $pdfData = file_get_contents($_FILES['pdf']['tmp_name']);
 if (substr($pdfData, 0, 5) !== '%PDF-') fail('bad_pdf', 'O ficheiro recebido não é um PDF.');
 
-$titulo = $m['type'] === 'acerto' ? 'Recibo de Consignação · Acerto' : 'Recibo de Consignação · Entrega';
+$titulo = $m['type'] === 'acerto'
+    ? 'Recibo de Consignação · Acerto'
+    : ($m['type'] === 'ajuste' ? 'Recibo de Consignação · Reavaliação de Preços' : 'Recibo de Consignação · Entrega');
 $assunto = $titulo . ' — ' . $m['c_name'] . ' — Nº ' . $m['rec_id'];
 $corpo = (string)($_POST['body'] ?? '');
 if ($corpo === '') {

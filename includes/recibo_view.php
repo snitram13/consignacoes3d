@@ -32,6 +32,9 @@ function recibo_load(int $movementId, ?int $userId = null): ?array {
         'repostos'   => array_values(array_filter($items, fn($i) => $i['kind'] === 'reposto')),
         'stock'      => array_values(array_filter($items, fn($i) => $i['kind'] === 'stock')),
         'entregues'  => array_values(array_filter($items, fn($i) => $i['kind'] === 'entregue')),
+        /* reavaliação de preços: 'antes'[i] emparelha com 'depois'[i] (gravados intercalados) */
+        'antes'      => array_values(array_filter($items, fn($i) => $i['kind'] === 'antes')),
+        'depois'     => array_values(array_filter($items, fn($i) => $i['kind'] === 'depois')),
     ];
 }
 
@@ -45,8 +48,9 @@ function recibo_user(int $userId): ?array {
 }
 
 /* Uma via do recibo (HTML). */
-function via(array $m, array $u, array $vendidos, array $devolvidos, array $repostos, array $stockItems, array $entregues, float $rate, string $titulo, string $copyLabel, string $cls): string {
+function via(array $m, array $u, array $vendidos, array $devolvidos, array $repostos, array $stockItems, array $entregues, float $rate, string $titulo, string $copyLabel, string $cls, array $antes = [], array $depois = []): string {
     $isAcerto = $m['type'] === 'acerto';
+    $isAjuste = $m['type'] === 'ajuste';
     $h = '<div class="via ' . esc($cls) . '">';
     if ($u['logo']) $h .= '<img class="via-logo" src="' . esc($u['logo']) . '" alt="logo">';
     $h .= '<span class="via-tag">' . esc($copyLabel) . '</span>';
@@ -92,6 +96,33 @@ function via(array $m, array $u, array $vendidos, array $devolvidos, array $repo
             foreach ($stockItems as $i) $val += $i['qty'] * $i['price'];
             $h .= '<div class="via-sectitle">Stock total em consignação após esta visita</div>' . $table($stockItems, []);
             $h .= '<div class="via-totals"><div class="via-trow big"><span>Valor em loja</span><span>' . fmt($val) . '</span></div></div>';
+        }
+    } elseif ($isAjuste) {
+        $valAntes = 0;
+        $valDepois = 0;
+        $t = '<table><tr><th>Produto</th><th class="num">Qtd</th><th class="num">Preço antes</th><th class="num">Preço agora</th></tr>';
+        foreach ($antes as $k => $a) {
+            $d = $depois[$k] ?? $a;                     // par gravado imediatamente após o 'antes'
+            $valAntes  += $a['qty'] * $a['price'];
+            $valDepois += $d['qty'] * $d['price'];
+            $t .= '<tr><td>' . esc($a['name']) . '</td><td class="num">' . (int)$a['qty'] . '</td>' .
+                '<td class="num">' . fmt($a['price']) . '</td><td class="num"><strong>' . fmt($d['price']) . '</strong></td></tr>';
+        }
+        $t .= '</table>';
+        $h .= '<div class="via-sectitle">Novo preço de venda acordado nesta visita</div>' . $t;
+        $h .= '<div class="via-totals">' .
+            '<div class="via-trow"><span>Valor destes produtos antes</span><span>' . fmt($valAntes) . '</span></div>' .
+            '<div class="via-trow"><span>Valor destes produtos agora</span><span>' . fmt($valDepois) . '</span></div>' .
+            '<div class="via-trow big"><span>Diferença</span><span>' . ($valDepois >= $valAntes ? '+ ' : '− ') . fmt(abs($valDepois - $valAntes)) . '</span></div></div>';
+        $h .= '<p style="font-size:11px;color:#666;margin:8px 0 0">A mercadoria mantém-se em consignação na loja do cliente — só o preço de venda foi alterado.</p>';
+        if ($stockItems) {
+            $val = 0;
+            foreach ($stockItems as $i) $val += $i['qty'] * $i['price'];
+            $h .= '<div class="via-sectitle">Stock em consignação após a reavaliação</div>' . $table($stockItems, []);
+            $h .= '<div class="via-totals">' .
+                '<div class="via-trow"><span>Valor total em loja</span><span>' . fmt($val) . '</span></div>' .
+                '<div class="via-trow"><span>Comissão potencial (' . comm_pct($rate) . '%)</span><span>' . fmt($val * $rate) . '</span></div>' .
+                '<div class="via-trow big"><span>A receber se tudo vender</span><span>' . fmt($val - $val * $rate) . '</span></div></div>';
         }
     } else {
         $val = 0;
