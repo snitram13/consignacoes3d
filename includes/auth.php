@@ -114,12 +114,20 @@ function product_usage_count(int $userId, string $name): int {
     return (int)$st->fetchColumn();
 }
 
-/* Mapa nome(minúsculas) → nº de clientes em que está em stock — para a página do catálogo */
-function catalog_usage_map(int $userId): array {
-    $st = db()->prepare('SELECT LOWER(p.name) AS k, COUNT(DISTINCT c.id) AS n FROM products p JOIN clients c ON c.id = p.client_id WHERE c.user_id = ? AND p.qty > 0 GROUP BY LOWER(p.name)');
+/* Mapa nome(minúsculas) → clientes que têm o produto em consignação [{id, name}].
+   Serve para bloquear a alteração de preço no catálogo e apontar ao cliente certo. */
+function catalog_clients_map(int $userId): array {
+    $st = db()->prepare('
+        SELECT LOWER(p.name) AS k, c.id, c.name
+        FROM products p JOIN clients c ON c.id = p.client_id
+        WHERE c.user_id = ? AND p.qty > 0
+        GROUP BY LOWER(p.name), c.id, c.name
+        ORDER BY c.name');
     $st->execute([$userId]);
     $map = [];
-    foreach ($st->fetchAll() as $r) $map[$r['k']] = (int)$r['n'];
+    foreach ($st->fetchAll() as $r) {
+        $map[$r['k']][] = ['id' => (int)$r['id'], 'name' => $r['name']];
+    }
     return $map;
 }
 

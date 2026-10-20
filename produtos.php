@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id    = (int)($_POST['id'] ?? 0);
         $name  = trim($_POST['name'] ?? '');
         $price = (float)str_replace(',', '.', (string)($_POST['price'] ?? '0'));
-        $st = db()->prepare('SELECT name FROM catalog WHERE id = ? AND user_id = ?');
+        $st = db()->prepare('SELECT name, price FROM catalog WHERE id = ? AND user_id = ?');
         $st->execute([$id, $u['id']]);
         $cur = $st->fetch();
         if (!$cur) {
@@ -39,6 +39,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $oldName = $cur['name'];
             $renamed = mb_strtolower($name) !== mb_strtolower($oldName);
+
+            /* Enquanto o produto estiver em consignação, o preço não se muda aqui:
+               mudá-lo no catálogo não toca no stock que está na loja (esse vive em
+               products.price) e dava a ilusão de ter baixado o preço ao cliente.
+               O caminho certo é a reavaliação na ficha do cliente, que gera recibo
+               assinado. O campo já vai readonly no ecrã — isto cobre o resto. */
+            $emUso = catalog_clients_map((int)$u['id'])[mb_strtolower($oldName)] ?? [];
+            $precoBloqueado = $emUso && abs($price - (float)$cur['price']) >= 0.005;
+            if ($precoBloqueado) {
+                $price = (float)$cur['price'];
+            }
             // não permitir colidir com outro produto já existente no catálogo
             $dup = db()->prepare('SELECT id FROM catalog WHERE user_id = ? AND LOWER(name) = LOWER(?) AND id <> ?');
             $dup->execute([$u['id'], $name, $id]);
@@ -58,9 +69,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $updated = $up->rowCount();
                     }
                     $pdo->commit();
-                    $ok = $renamed
-                        ? 'Produto atualizado. Nome alterado também em ' . $updated . ' registo(s) de stock dos clientes.'
-                        : 'Preço atualizado.';
+                    if ($precoBloqueado) {
+                        $nomes = implode(', ', array_map(fn($cl) => $cl['name'], $emUso));
+                        $error = '🔒 O preço não foi alterado: "' . $name . '" está em consignação em ' . $nomes .
+                            '. Para mudar o preço do stock que já está na loja, use "Reavaliar preços do stock" na ficha do cliente.';
+                        if ($renamed) {
+                            $ok = 'Nome alterado (também em ' . $updated . ' registo(s) de stock dos clientes).';
+                        }
+                    } else {
+                        $ok = $renamed
+                            ? 'Produto atualizado. Nome alterado também em ' . $updated . ' registo(s) de stock dos clientes.'
+                            : 'Preço atualizado.';
+                    }
                 } catch (Exception $e) {
                     $pdo->rollBack();
                     $error = 'Erro ao atualizar: ' . $e->getMessage();
@@ -85,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $catalog = get_catalog((int)$u['id']);
-$usage = catalog_usage_map((int)$u['id']);
+$usageClients = catalog_clients_map((int)$u['id']);
 
 $pageTitle = 'Catálogo de produtos';
 $backUrl = 'index.php';
@@ -111,7 +131,10 @@ require __DIR__ . '/includes/layout_header.php';
 <div class="section-title">Produtos no catálogo <?= $catalog ? '(' . count($catalog) . ')' : '' ?></div>
 <div class="panel">
   <?php if ($catalog): ?>
-    <?php foreach ($catalog as $cp): $emUso = $usage[mb_strtolower($cp['name'])] ?? 0; ?>
+    <?php foreach ($catalog as $cp):
+      $clientes = $usageClients[mb_strtolower($cp['name'])] ?? [];
+      $emUso = count($clientes);
+    ?>
       <details class="comm-edit" style="border-bottom:1px solid var(--line,#eee)">
         <summary class="prod-row" style="cursor:pointer;list-style:none">
           <span class="pr1"><?= esc($cp['name']) ?><?php if ($emUso > 0): ?> <span class="badge badge-green" style="font-size:11px">em <?= $emUso ?> cliente<?= $emUso === 1 ? '' : 's' ?></span><?php endif; ?></span>
@@ -124,14 +147,22 @@ require __DIR__ . '/includes/layout_header.php';
           <input type="hidden" name="id" value="<?= (int)$cp['id'] ?>">
           <div class="row3">
             <div class="field" style="margin:0;grid-column:span 2"><label>Nome</label><input type="text" name="name" value="<?= esc($cp['name']) ?>"></div>
-            <div class="field" style="margin:0"><label>Preço €</label><input type="number" name="price" min="0" step="0.01" inputmode="decimal" value="<?= esc(number_format((float)$cp['price'], 2, '.', '')) ?>"></div>
+            <div class="field" style="margin:0"><label>Preço €<?= $emUso ? ' 🔒' : '' ?></label>
+              <input type="number" name="price" min="0" step="0.01" inputmode="decimal"
+                     value="<?= esc(number_format((float)$cp['price'], 2, '.', '')) ?>"
+                     <?= $emUso ? 'readonly title="Em consignação — o preço muda na ficha do cliente" style="background:var(--surface2);color:var(--text3)"' : '' ?>>
+            </div>
           </div>
           <div class="row2" style="margin-top:10px">
             <button type="submit" class="btn btn-primary">Guardar</button>
           </div>
         </form>
         <?php if ($emUso > 0): ?>
-          <p class="hint" style="margin:8px 0 4px;color:#b3261e">🔒 Não pode remover: está em consignação em <?= $emUso ?> cliente<?= $emUso === 1 ? '' : 's' ?>. Faça primeiro o acerto desse stock.</p>
+          <p class="hint" style="margin:8px 0 4px;color:#b3261e">
+            🔒 Em consignação em
+            <?php foreach ($clientes as $k => $cl): ?><?= $k ? ', ' : '' ?><a href="ajuste.php?id=<?= (int)$cl['id'] ?>" style="color:inherit;font-weight:600;text-decoration:underline"><?= esc($cl['name']) ?></a><?php endforeach; ?>.
+            O preço aqui não se altera — mudá-lo não mexia no stock que já está na loja. Use <strong>🏷️ Reavaliar preços do stock</strong> na ficha do cliente (toque no nome acima), que gera recibo assinado. Para remover do catálogo, faça primeiro o acerto desse stock.
+          </p>
         <?php else: ?>
           <form method="post" onsubmit="return confirm('Remover <?= esc($cp['name']) ?> do catálogo?')">
             <?= csrf_field() ?>
