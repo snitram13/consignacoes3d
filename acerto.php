@@ -11,9 +11,19 @@ $catalog = get_catalog((int)$u['id']);
 $rate = comm_rate($c, $u);
 
 $error = '';
+$stale = false;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $date = $_POST['date'] ?: date('Y-m-d');
     $sig  = $_POST['signature'] ?? '';
+
+    /* O stock final é calculado no browser a partir do que a página leu ao abrir.
+       Se outro dispositivo mexeu no stock entretanto, gravar aqui apagava essa
+       alteração — por isso comparamos com o estado atual da base de dados.
+       (Campo vazio = página aberta antes desta verificação existir.) */
+    $fpForm = (string)($_POST['stock_fp'] ?? '');
+    if ($fpForm !== '' && !hash_equals(stock_fingerprint($products), $fpForm)) {
+        $stale = true;
+    }
 
     /* vendas: [{name, vendeu, devolveu, price}] — o mesmo payload traz vendas e devoluções */
     $vendasRaw = json_decode($_POST['vendas'] ?? '[]', true) ?: [];
@@ -33,7 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     /* reposição: novos produtos que o cliente deseja */
     $reposicao = array_values(array_filter(parse_products_json($_POST['reposicao'] ?? ''), fn($p) => $p['qty'] > 0));
 
-    if (!valid_signature($sig)) {
+    if ($stale) {
+        $error = 'O stock deste cliente foi alterado noutro dispositivo depois de esta página abrir. Nada foi gravado — veja os valores atuais abaixo e registe a visita outra vez.';
+    } elseif (!valid_signature($sig)) {
         $error = 'Assinatura em falta. Recolha a assinatura do cliente.';
     } else {
         /* stock final na loja = o que fica + reposição (junta produtos iguais) */
@@ -88,10 +100,11 @@ $backUrl = 'cliente.php?id=' . (int)$c['id'];
 $backLabel = 'Voltar';
 require __DIR__ . '/includes/layout_header.php';
 ?>
-<?php if ($error): ?><div class="alert alert-error"><?= esc($error) ?></div><?php endif; ?>
+<?php if ($error): ?><div class="alert alert-error"><?= esc($error) ?><?php if ($stale): ?> <a href="acerto.php?id=<?= (int)$c['id'] ?>" style="color:inherit;font-weight:600;text-decoration:underline">↻ Recarregar</a><?php endif; ?></div><?php endif; ?>
 <form method="post" id="ac-form" action="acerto.php?id=<?= (int)$c['id'] ?>">
   <?= csrf_field() ?>
   <input type="hidden" name="id" value="<?= (int)$c['id'] ?>">
+  <input type="hidden" name="stock_fp" value="<?= esc(stock_fingerprint($products)) ?>">
   <input type="hidden" name="vendas" id="ac-vendas-input">
   <input type="hidden" name="stock_fica" id="ac-stock-input">
   <input type="hidden" name="reposicao" id="ac-repo-input">

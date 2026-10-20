@@ -14,7 +14,15 @@ $products = get_client_products((int)$c['id']);
 if (!$products) redirect('cliente.php?id=' . (int)$c['id']);
 
 $error = '';
+$stale = false;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    /* outro dispositivo mexeu no stock deste cliente desde que a página abriu?
+       (campo vazio = página aberta antes desta verificação existir) */
+    $fpForm = (string)($_POST['stock_fp'] ?? '');
+    if ($fpForm !== '' && !hash_equals(stock_fingerprint($products), $fpForm)) {
+        $stale = true;
+    }
+
     /* a data tem de chegar em Y-m-d — o Postgres rejeita qualquer outra coisa */
     $date = (string)($_POST['date'] ?? '');
     $d = DateTime::createFromFormat('Y-m-d', $date);
@@ -45,7 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $changes[] = ['id' => $pid, 'name' => $p['name'], 'qty' => (int)$p['qty'], 'old' => $old, 'new' => $new];
     }
 
-    if (!$changes) {
+    if ($stale) {
+        $error = 'O stock deste cliente foi alterado noutro dispositivo depois de esta página abrir. Nada foi gravado — veja os preços atuais abaixo e reavalie outra vez.';
+    } elseif (!$changes) {
         $error = 'Nenhum preço foi alterado. Indique o novo preço de pelo menos um produto.';
     } elseif (!valid_signature($sig)) {
         $error = 'Assinatura em falta. Recolha a assinatura do cliente.';
@@ -118,10 +128,11 @@ $backUrl = 'cliente.php?id=' . (int)$c['id'];
 $backLabel = 'Voltar';
 require __DIR__ . '/includes/layout_header.php';
 ?>
-<?php if ($error): ?><div class="alert alert-error"><?= esc($error) ?></div><?php endif; ?>
+<?php if ($error): ?><div class="alert alert-error"><?= esc($error) ?><?php if ($stale): ?> <a href="ajuste.php?id=<?= (int)$c['id'] ?>" style="color:inherit;font-weight:600;text-decoration:underline">↻ Recarregar</a><?php endif; ?></div><?php endif; ?>
 <form method="post" id="aj-form" action="ajuste.php?id=<?= (int)$c['id'] ?>">
   <?= csrf_field() ?>
   <input type="hidden" name="id" value="<?= (int)$c['id'] ?>">
+  <input type="hidden" name="stock_fp" value="<?= esc(stock_fingerprint($products)) ?>">
   <input type="hidden" name="items" id="aj-items">
   <input type="hidden" name="signature" id="aj-signature">
 

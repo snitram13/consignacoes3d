@@ -10,6 +10,14 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+/* As páginas mostram stock que pode ser alterado noutro telemóvel — o navegador
+   nunca deve servir uma cópia guardada (típico ao voltar atrás). */
+if (PHP_SAPI !== 'cli' && !headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 /* ── CSRF ── */
 function csrf_token(): string {
     if (empty($_SESSION['csrf'])) {

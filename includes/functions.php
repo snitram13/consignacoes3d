@@ -68,6 +68,22 @@ function parse_products_json(?string $json): array {
     return $out;
 }
 
+/* Impressão digital do stock de um cliente.
+   Vai escondida nos formulários de visita: se ao gravar já não corresponder ao
+   que está na base de dados, outro dispositivo mexeu no stock entretanto e a
+   gravação é recusada em vez de apagar silenciosamente o trabalho do outro.
+   Usa nome+qtd+preço (ordenados) e não os ids, porque os ids são recriados a
+   cada acerto. */
+function stock_fingerprint(array $products): string {
+    $parts = [];
+    foreach ($products as $p) {
+        $parts[] = mb_strtolower(trim((string)$p['name'])) . '|' . (int)$p['qty'] . '|' .
+            number_format((float)$p['price'], 2, '.', '');
+    }
+    sort($parts);
+    return substr(hash('sha256', implode(';', $parts)), 0, 16);
+}
+
 /* Valida que a assinatura é um data-url PNG */
 function valid_signature(?string $sig): bool {
     return is_string($sig) && strpos($sig, 'data:image/png;base64,') === 0 && strlen($sig) < 800000;
